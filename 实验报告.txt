@@ -72,9 +72,17 @@ static void __init boot_cpu_init(void)
     之后是setup_arch(&command_line)，做体系相关的初始化工作，进行CPU配置初始化，CPU Cache初始化等等。
     trap_init()中调用的set_trap_gate()函数位于/include/asm/system.h，这个函数设置中断向量表。
     sched_init()在kernel/sched/core.c中，初始化调度器。
-    time_init()实现timer初始化，console_init()初始化console等等，在很多init函数后，在start_kernel函数的最后调用了rest_init()。rest_init也位于init/main.c中，进行最后的初始化工作
-    其中pid = kernel_thread(kernel_init, NULL, CLONE_FS)创建kernel_init内核线程，即1号进程，但是在kthreadd后运行。
-    在pid = kernel_thread(kthreadd, NULL, CLONE_FS | CLONE_FILES)中创建kthreadd内核线程，2号进程，用于管理和调度其它内核线程。
+    time_init()实现timer初始化，console_init()初始化console等等，在很多init函数后，在start_kernel函数的最后调用了rest_init()。
+    rest_init也位于init/main.c中，进行最后的初始化工作。
+    其中pid = kernel_thread(kernel_init, NULL, CLONE_FS)创建kernel_init内核线程，即1号进程，但是在kthreadd后运行。1号内核线程负责执行内核的部分初始化工作及进行系统配置。
+    可以找到在kernel的fork.c中有
+    pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
+{
+	return _do_fork(flags|CLONE_VM|CLONE_UNTRACED, (unsigned long)fn,
+		(unsigned long)arg, NULL, NULL, 0);
+}
+即fork一个内核线程
+    在pid = kernel_thread(kthreadd, NULL, CLONE_FS | CLONE_FILES)中创建kthreadd内核线程，2号进程，用于管理和调度其它内核线程。
     complete(&kthreadd_done)通知kernel_init进程kthreadd进程已创建完成。
     最后的函数cpu_startup_entry(CPUHP_ONLINE)会调用cpu_idle_loop(), cpu_idle_loop()里面有个while(1)的循环，作为idle进程，pid = 0，在系统没有任何需要执行的进程时调度到此进程。 
     到此操作系统就运行起来了。
