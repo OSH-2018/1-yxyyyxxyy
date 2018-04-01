@@ -1,0 +1,59 @@
+LAB01
+使用工具qemu和gdb，VMware虚拟机中的Ubuntu。
+
+实验过程：
+    从来没有接触过Linux和虚拟机，首先下载了VMware虚拟机和Ubuntu，在安装VMwareTools时遇到了很大困难，网上的都是错的没有一个能成功安装。后来我在网上找到学习视频学了一些简单的Linux指令，安装VMwareTools简单了很多，同时解决了一个问题：因为是中文版的linux，进入桌面必须使用cd 桌面 这样的指令，而又不能切换中文输入法。最后使用ls指令并复制下来“桌面”两个字完成了进入桌面。后来学了软连接之后我尝试着把桌面软连接并起了一个英文名放在~目录下，但是后来发现有一些奇奇怪怪的错误，这样应该不行。
+    这个虚拟机在每次我的win10重新启动后都无法启动linux，经过长时间查询和尝试，每次重新启动win10系统后需要去本地服务中找到所有vmware相关的服务一一启动。如果仍然不好使就要去任务管理器中强制关闭所有vmware相关进程再重复步骤。
+    我又学了简单的git。按照课程主页上的git教程，因为我用windows电脑，我分别安装了Git-2.6.3-64-bit、TortoiseGit-2.6.0.0-64bit和TortoiseGit-LanguagePack-2.6.0.0-64bit-zh_CN，这三个软件可以再windows上完成git提交推送等等。学习了在windows上创建仓库、推送获取后，然后开始了第一个简单的实验----编写hello_linux。
+    我在虚拟机的Ubuntu里面touch了hello_linux.sh文件，双击打开并编写好了指令，这时发现在命令行使用./hello_linux.sh并不能运行，应该把它设为可执行文件。因为不知道下载文件的人算这个文件的所有人还是其他人，我用chmod 777把它变成-rwxrwxrwx文件，然后把他拖到windows中（需要VMwareTools），这时用文本打开它发现所有的回车变成了一个类似空格的符号（windows下的\n）。在windows中把他提交后，我把这个文件又拖回到linux中，再次ls -l他，发现他的权限又改变了。文件从linux拖到windows会改变文件的属性，为了能提交正确的文件（在windows中提交我觉的也应该是正确的），我又学了在linux中使用命令行进行git。这次成功提交了hello_linux.sh文件。
+    然后是追踪操作系统启动过程，我一开始想在windows里面调试虚拟机中系统的启动，按照网上的方法安装了visual studio 2017和wingdb，并建立wingdb项目，失败。经过各种尝试，网上的教程看不懂或者不能用。最后我决定在虚拟机中进行。
+    首先下载了linux内核4.15.14，分别用xz和tar指令解压拆包，安装了一系列必要软件后使用make menuconfig，进入图形界面，取消Processor tpe and featyres -> Build a relocatable Kermel，同时取消KASLR子项。打开Kernel Hacking -> Compile-time checks and compiler options下的Compile the kernel with debug info(这个自动选上了)和Compile the kernel with frame pointers，网上说也可以裁剪以提升速度。保存退出并make，过一会会提示缺少一些东西，按提示安装，安装到drivers/这里基本就可以等着了。
+    3个小时过去了。磁盘空间不足，编译失败。
+    在创建虚拟机的时候按照网上的教程，linux默认分配20G磁盘空间，编译内核不够用！没办法，只能先关机 -> 删掉所有快照 -> 扩展磁盘容量。他提醒我要在linux中分区。之后打开linux，经过了各种尝试，网上很多很多教程都是不能用的。
+    首先所有下载文件的教程通通不行。磁盘已经满了根本无法下载任何文件。我尝试了各种扩展sda1分区均以失败告终。所以只能将文件移到另一个更大的分区重新编译。最后发现：首先需要弄出来一点空间，通过清空回收站获得。这时回收站已经不能清空了，右键清空会返回错误（我也不知道为什么），使用正常指令也无法清空回收站。最后使用sudo rm -rf ~/.local.share/Trash/files/*才成功清理回收站。之后sudo su进入root模式，fdisk -l查看磁盘的情况，发现已经有了sda1，sda2，sda5分区，首先进行分区，fdisk /dev/sda，用m, n, p, 并选择默认的值分别创建了sda3和sda4，其中sda4是40G的分区（一共60G）。然后reboot。启动后使用mkfs.ext3 /dev/sda4 进行格式化，用mkdir /exapp在根目录下创建了文件夹exapp，用mount /dev/sda4 /exapp挂载，这时使用df -lh就可以看到40G左右的sda4了。这时需要vi编辑/etc/fstab文件，又学了vim编辑的一些命令在最后一行加上了sda4的启动（如果不清理回收站的话空间不足无法保存）。之后mv整个文件夹到/exapp/中，重新进行编译make，可以拿到/exapp/linuxcode/linux-4.15.14/arch/x86/boot/bzImage。这次编译过程要花更长时间，直接在电脑上装双系统。
+    弄完后首先安装qemu，使用sudo apt-get install qemu完成，之后在网站下载gdb解压，由于错误Remote 'g' packet reply is too long: 在 gdb-7.8/gdb/remote.c 文件的 static void process_g_packet (struct regcache *regcache)函数里面修改部分内容，注释掉
+/* Further sanity checks, with knowledge of the architecture.  */
+/* if (buf_len > 2 * rsa->sizeof_g_packet)
+       error (_("Remote 'g' packet reply is too long: %s"), rs->buf);
+*/
+并修改为：
+if (buf_len > 2 * rsa->sizeof_g_packet) {
+     rsa->sizeof_g_packet = buf_len;
+     for (i = 0; i < gdbarch_num_regs(gdbarch); i++) {
+         if (rsa->regs[i].pnum == -1)    
+             continue;
+         if (rsa->regs[i].offset >= rsa->sizeof_g_packet)
+             rsa->regs[i].in_g_packet = 0;
+         else
+             rsa->regs[i].in_g_packet = 1;
+     }
+}
+之后进入相应目录sudo su，./configure以及make、make install即可，gdb -v可显示安装成功。
+    下载根文件系统gcc -o -pthread init linktable.c menu.c test.c -m32 -static和 find . | cpio -o -Hnewc |gzip -9 > ../rootfs.img 得到rootfs.img。
+    开始调试，设置断点start_kernel找到的关键事件start_kernel。首先完成一些列初始化操作并来到start_kernel函数，它是与体系架构无关的通用处理入口函数，该函数主要的目的是完成内核初始化，启动1号进程。通过对比源代码，看到了char *command_line内核命令行的全局指针和char *after_dashes;
+    紧接着就是set_task_stack_end_magic(&init_task)，其中init_task在init/init_task.c中，由INIT_TASK这个函数来初始化。调试得到在kernel/Fork.c中，可以看到这个函数获取栈的边界地址并设置栈溢出标志。
+    中断一直是被屏蔽的，之后有boot_cpu_init()函数和page_address_init()函数，第一个函数是
+static void __init boot_cpu_init(void)
+{
+	int cpu = smp_processor_id();
+	/* Mark the boot cpu "present", "online" etc for SMP and UP case */
+	set_cpu_online(cpu, true);
+	set_cpu_active(cpu, true);
+	set_cpu_present(cpu, true);
+	set_cpu_possible(cpu, true);
+}
+初始化每个cpu。这个函数设置了在线,激活,当前和热插拔的属性。
+而page_address_init有
+#if !defined(HASHED_PAGE_VIRTUAL) && !defined(WANT_PAGE_VIRTUAL)  
+#define page_address_init()  do { } while(0) 
+不执行任何操作，只有在所有内存不能直接映射的时候才执行。
+    之后有pr_notice("%s", linux_banner)内核的第一条打印信息。
+    之后是setup_arch(&command_line)，做体系相关的初始化工作，进行CPU配置初始化，CPU Cache初始化等等。
+    trap_init()中调用的set_trap_gate()函数位于/include/asm/system.h，这个函数设置中断向量表。
+    sched_init()在kernel/sched/core.c中，初始化调度器。
+    time_init()实现timer初始化，console_init()初始化console等等，在很多init函数后，在start_kernel函数的最后调用了rest_init()。rest_init也位于init/main.c中，进行最后的初始化工作
+其中pid = kernel_thread(kernel_init, NULL, CLONE_FS)创建kernel_init内核线程，即1号进程，但是在kthreadd后运行。
+在pid = kernel_thread(kthreadd, NULL, CLONE_FS | CLONE_FILES)中创建kthreadd内核线程，2号进程，用于管理和调度其它内核线程。
+complete(&kthreadd_done)通知kernel_init进程kthreadd进程已创建完成。
+最后的函数cpu_startup_entry(CPUHP_ONLINE)会调用cpu_idle_loop(), cpu_idle_loop()里面有个while(1)的循环，作为idle进程，pid = 0，在系统没有任何需要执行的进程时调度到此进程。 
+    到此操作系统就运行起来了。
